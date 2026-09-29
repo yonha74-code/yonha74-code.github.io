@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>돌봄 체크 가족 초대</title>
+<meta property="og:title" content="돌봄 체크 가족 초대">
+<meta property="og:description" content="누가 밥 줬는지 가족이 같이 봐요. 눌러서 가족에 들어오세요.">
+<meta property="og:type" content="website">
+<!-- 카톡 등 링크 미리보기에 제목 옆 정사각형 앱 아이콘 (전체 주소여야 읽힘. 아이콘은 npm run build:icons) -->
+<meta property="og:image" content="https://yonha74-code.github.io/dolbom-check/og-icon.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta property="og:site_name" content="돌봄 체크">
+<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<style>
+  body { margin: 0; font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #EEF3EF; color: #1F2A24; }
+  main { max-width: 420px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 26px; line-height: 1.4; margin: 0 0 12px; }
+  p { color: #5E6B63; line-height: 1.6; margin: 0 0 24px; }
+  .code { font-size: 34px; font-weight: 800; letter-spacing: 5px; background: #fff; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 24px; }
+  button, a.btn { display: block; width: 100%; box-sizing: border-box; border: 0; border-radius: 12px; padding: 16px; font-size: 17px; font-weight: 700; text-align: center; text-decoration: none; margin-bottom: 12px; }
+  .primary { background: #2F7D4F; color: #fff; }
+  .ghost { background: transparent; color: #5E6B63; text-decoration: underline; font-weight: 500; }
+  #msg { color: #2F7D4F; min-height: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>가족이 돌봄 체크에<br>초대했어요</h1>
+  <p>앱을 열면 초대코드가 자동으로 입력돼요. 앱이 없으면 설치 후 첫 화면에서 바로 들어갈 수 있어요.</p>
+  <div class="code" id="code">------</div>
+  <button class="primary" id="open">앱에서 열기</button>
+  <a class="btn ghost" id="store">앱 설치하기</a>
+  <a class="btn ghost" id="external">카카오톡에서 안 열리면 다른 브라우저로 열기</a>
+  <div id="msg"></div>
+</main>
+<script>
+  var PKG = 'com.yonha74.dolbomcheck';
+  // 초대코드: I·O·0·1 을 뺀 8자리 (앱 lib/invite.ts, 서버 new_invite_code 와 같은 규칙)
+  var raw = (new URLSearchParams(location.search).get('c') || '').replace(/\s/g, '').toUpperCase();
+  var code = /^[A-HJ-NP-Z2-9]{8}$/.test(raw) ? raw : '';
+  var store = 'https://play.google.com/store/apps/details?id=' + PKG;
+  document.getElementById('code').textContent = code || '코드 없음';
+  document.getElementById('store').href = store;
+  document.getElementById('external').href =
+    'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+
+  // 설치 후 첫 실행에서 앱이 클립보드의 코드를 자동으로 채움
+  function copy() {
+    if (!code) return Promise.resolve();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(code).catch(function () {});
+    }
+    return Promise.resolve();
+  }
+  document.getElementById('store').addEventListener('click', copy);
+  document.getElementById('open').addEventListener('click', function () {
+    copy().then(function () {
+      if (/android/i.test(navigator.userAgent)) {
+        location.href = 'intent://join?code=' + code +
+          '#Intent;scheme=dolbomcheck;package=' + PKG +
+          ';S.browser_fallback_url=' + encodeURIComponent(store) + ';end';
+      } else {
+        document.getElementById('msg').textContent = '지금은 안드로이드 앱만 있어요. 코드를 복사해 두었어요.';
+      }
+    });
+  });
+</script>
+</body>
+</html>
