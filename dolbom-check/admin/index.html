@@ -21,6 +21,7 @@
   .bar img { width: 32px; height: 32px; border-radius: 8px; }
   .bar h1 { font-size: 18px; font-weight: 800; margin: 0; flex: 1; }
   .who { font-size: 13px; color: var(--sub); }
+  .ver { font-size: 12px; font-weight: 700; color: var(--doneDark); background: var(--doneSoft); border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
   main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 60px; }
   button { font: inherit; cursor: pointer; border-radius: 12px; border: 1px solid var(--line); background: var(--white); color: var(--ink); padding: 8px 14px; min-height: 40px; }
   button:hover { border-color: var(--sub); }
@@ -81,7 +82,7 @@
 <body>
 <header><div class="bar">
   <img src="../favicon.png" alt="">
-  <h1>돌봄 체크 운영</h1>
+  <h1>돌봄 체크 운영 <span class="ver" id="ver" title="웹 배포 때 app.json 기준으로 자동 표시">앱 0.1.0 · 빌드 7</span></h1>
   <span class="who" id="who"></span>
   <button id="logout" hidden>로그아웃</button>
 </div></header>
@@ -104,6 +105,9 @@ const sb = DEMO ? null : createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
   auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true, storage: window.sessionStorage, storageKey: 'dolbom-admin' },
 });
 const app = document.getElementById('app');
+// 앱 버전은 배포 스크립트가 채운다. 로컬·예시 화면처럼 채워지지 않았으면 표시하지 않음
+const verEl = document.getElementById('ver');
+if (verEl.textContent.includes('__')) verEl.remove();
 // 신고 사진 경로는 앱이 만드는 모양만 (023 의 DB 제약과 같은 규칙)
 const PHOTO_RE = /^[0-9a-f-]{36}\/logs\/[0-9a-f-]{36}-[0-9]{10,16}\.jpg$/;
 
