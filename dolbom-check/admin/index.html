@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>돌봄 체크 운영</title>
+<link rel="icon" type="image/png" href="../favicon.png">
+<style>
+  /* 색·간격은 DESIGN.md 토큰 (kakao 노랑은 카카오 로그인 버튼 규정 색) */
+  :root {
+    --paper: #EEF3EF; --ink: #1F2A24; --sub: #5E6B63; --line: #D3DDD6; --white: #FFFFFF;
+    --wait: #E0A526; --waitSoft: #FBF1DA; --done: #2F7D4F; --doneDark: #256641; --doneSoft: #E3F0E8;
+    --late: #C8453A; --lateSoft: #F8E3E1; --kakao: #FEE500;
+    --shadow: 0 3px 10px rgba(31, 42, 36, .08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: var(--paper); color: var(--ink); font-size: 15px; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1180px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .bar img { width: 32px; height: 32px; border-radius: 8px; }
+  .bar h1 { font-size: 18px; font-weight: 800; margin: 0; flex: 1; }
+  .who { font-size: 13px; color: var(--sub); }
+  main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 60px; }
+  button { font: inherit; cursor: pointer; border-radius: 12px; border: 1px solid var(--line); background: var(--white); color: var(--ink); padding: 8px 14px; min-height: 40px; }
+  button:hover { border-color: var(--sub); }
+  button.primary { background: var(--done); border-color: var(--done); color: var(--white); font-weight: 700; }
+  button.danger { color: var(--late); border-color: var(--late); }
+  button.kakao { background: var(--kakao); border-color: var(--kakao); color: #191919; font-weight: 700; padding: 12px 24px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .card { background: var(--white); border-radius: 18px; box-shadow: var(--shadow); padding: 16px; }
+  .center { max-width: 420px; margin: 60px auto; text-align: center; display: grid; gap: 14px; }
+  .muted { color: var(--sub); font-size: 13px; }
+  .demo { background: var(--waitSoft); border: 1px solid var(--wait); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+  .err { background: var(--lateSoft); color: var(--late); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+  nav.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  nav.tabs button { border-radius: 20px; }
+  nav.tabs button[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--white); }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: var(--late); color: var(--white); font-size: 12px; font-weight: 800; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .kpi .label { font-size: 13px; color: var(--sub); font-weight: 700; }
+  .kpi .big { font-size: 34px; font-weight: 900; margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
+  .kpi .rows { display: grid; gap: 2px; font-size: 13px; color: var(--sub); }
+  .kpi .rows b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  h2 { font-size: 16px; margin: 24px 0 10px; }
+  .wrap { overflow-x: auto; background: var(--white); border-radius: 18px; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; color: var(--sub); font-weight: 700; background: #F6F9F7; position: sticky; top: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.wide { white-space: normal; min-width: 180px; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+  .pill.kakao { background: var(--waitSoft); color: #8A6D00; }
+  .pill.guest { background: var(--paper); color: var(--sub); }
+  .pill.open { background: var(--lateSoft); color: var(--late); }
+  .pill.done { background: var(--doneSoft); color: var(--doneDark); }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .tools input { font: inherit; padding: 8px 12px; min-height: 40px; border: 1px solid var(--line); border-radius: 12px; min-width: 220px; flex: 1; max-width: 360px; background: var(--white); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 140px; padding: 12px 4px 0; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; min-width: 6px; }
+  .chart .b { width: 100%; border-radius: 4px 4px 0 0; background: var(--done); }
+  .chart .b.alt { background: var(--wait); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--sub); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .report { display: grid; gap: 8px; margin-bottom: 12px; }
+  .report .meta { font-size: 13px; color: var(--sub); }
+  .report blockquote { margin: 0; padding: 10px 12px; background: var(--paper); border-radius: 12px; white-space: pre-wrap; word-break: break-word; }
+  .report img { max-width: 260px; max-height: 260px; border-radius: 12px; display: block; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; font-size: 13px; color: var(--sub); }
+  .empty { padding: 24px; text-align: center; color: var(--sub); }
+  @media (max-width: 600px) {
+    .kpi .big { font-size: 28px; }
+    .bar h1 { font-size: 16px; }
+    .who { display: none; }
+  }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <img src="../favicon.png" alt="">
+  <h1>돌봄 체크 운영</h1>
+  <span class="who" id="who"></span>
+  <button id="logout" hidden>로그아웃</button>
+</div></header>
+<main id="app"><p class="muted">불러오는 중…</p></main>
+
+<script type="module">
+// 운영자(슈퍼 관리자) 화면.
+// 보안: 이 페이지는 공개 저장소에 올라간다. 비밀값은 없다(Publishable key 는 앱에도 들어 있는 공개 값).
+//       누가 관리자인지는 DB(023 private.admins + is_admin)가 판정하고, admin_* 함수가 매번 다시 확인한다.
+//       화면에 넣는 호칭·가족 이름·신고 글은 사용자가 쓴 글이라 반드시 textContent 로만 넣는다(innerHTML 금지).
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
+
+const SUPABASE_URL = 'https://twyjbquiwsiiahizpzij.supabase.co';
+const PUBLISHABLE_KEY = 'sb_publishable_1QwZxyCUeoD7waUmTUGbhw_3xwsrI4_';
+const DEMO = location.hash === '#demo';   // 화면 확인용 예시 데이터 (서버에 접속하지 않음)
+const PAGE = 50;
+
+// 로그인 정보는 이 탭에만(sessionStorage, 전용 이름): 같은 github.io 주소의 다른 페이지와 섞이지 않고, 탭을 닫으면 사라진다
+const sb = DEMO ? null : createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
+  auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true, storage: window.sessionStorage, storageKey: 'dolbom-admin' },
+});
+const app = document.getElementById('app');
+// 신고 사진 경로는 앱이 만드는 모양만 (023 의 DB 제약과 같은 규칙)
+const PHOTO_RE = /^[0-9a-f-]{36}\/logs\/[0-9a-f-]{36}-[0-9]{10,16}\.jpg$/;
+
+// ── 작은 DOM 도우미: 글자는 언제나 textContent 로 ──
+function h(tag, props = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return el;
+}
+const n = (v) => (v == null ? '-' : Number(v).toLocaleString('ko-KR'));
+const day = (v) => (v ? String(v).slice(0, 10) : '-');
+const kst = (v) => v ? new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+const ERR = { forbidden: '관리자 계정이 아니에요.', not_found: '이미 없어진 신고예요.', already_open: '같은 사람이 같은 대상을 다시 신고해 열린 신고가 이미 있어요.' };
+const errText = (e) => Object.entries(ERR).find(([k]) => String(e?.message ?? e).includes(k))?.[1] ?? `문제가 생겼어요: ${e?.message ?? e}`;
+
+async function rpc(name, args = {}) {
+  if (DEMO) return demo(name, args);
+  const { data, error } = await sb.rpc(name, args);
+  if (error) throw error;
+  return data;
+}
+
+// ── 시작: 로그인 → 관리자 확인 → 화면 ──
+async function start() {
+  if (DEMO) return admin({ email: '예시 화면' });
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return login();
+  const user = session.user;
+  document.getElementById('who').textContent = user.email ?? '카카오 계정';
+  const out = document.getElementById('logout');
+  out.hidden = false;
+  out.onclick = async () => { await sb.auth.signOut(); location.reload(); };
+  let ok = false;
+  try { ok = await rpc('is_admin'); } catch { ok = false; }
+  if (!ok) return notAdmin(user);
+  admin(user);
+}
+
+function login() {
+  app.replaceChildren(h('div', { class: 'card center' },
+    h('h2', {}, '운영자 로그인'),
+    h('p', { class: 'muted' }, '앱에서 카카오를 연결한 운영자 계정으로 로그인하세요. 운영자가 아닌 계정은 아무것도 볼 수 없어요.'),
+    h('button', { class: 'kakao', onclick: async () => {
+      const { error } = await sb.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: location.origin + location.pathname } });
+      if (error) alert(errText(error));
+    } }, '카카오로 로그인'),
+  ));
+}
+
+function notAdmin(user) {
+  app.replaceChildren(h('div', { class: 'card center' },
+    h('h2', {}, '운영자 계정이 아니에요'),
+    h('p', { class: 'muted' }, '운영자로 등록된 카카오 계정으로 다시 로그인하세요.'),
+    h('p', { class: 'muted' }, '이 계정 ID: ', h('code', {}, user.id)),
+  ));
+}
+
+// ── 관리자 화면 ──
+const TABS = [['summary', '요약'], ['users', '사용자'], ['families', '가족'], ['reports', '신고'], ['errors', '오류']];
+let current = 'summary';
+let dash = null;
+
+async function admin() {
+  try { dash = await rpc('admin_dashboard'); } catch (e) { return app.replaceChildren(h('div', { class: 'err' }, errText(e))); }
+  render();
+}
+
+function render() {
+  const tabs = h('nav', { class: 'tabs', role: 'tablist' }, TABS.map(([k, label]) =>
+    h('button', { role: 'tab', 'aria-selected': current === k ? 'true' : 'false', onclick: () => { current = k; render(); } },
+      label, k === 'reports' && dash?.reports_open ? h('span', { class: 'badge' }, n(dash.reports_open)) : null)));
+  const body = h('section');
+  app.replaceChildren(DEMO ? h('div', { class: 'demo' }, '예시 데이터로 보는 화면이에요. 실제 서버에는 접속하지 않아요.') : '', tabs, body);
+  ({ summary, users, families, reports, errors })[current](body).catch((e) => body.replaceChildren(h('div', { class: 'err' }, errText(e))));
+}
+
+function kpi(label, big, rows) {
+  return h('div', { class: 'card kpi' },
+    h('div', { class: 'label' }, label), h('div', { class: 'big' }, big),
+    h('div', { class: 'rows' }, rows.map(([k, v]) => h('div', {}, k, ' ', h('b', {}, v)))));
+}
+
+async function summary(el) {
+  const d = dash;
+  el.append(
+    h('div', { class: 'grid' },
+      kpi('전체 가입자', n(d.users), [['카카오 연결', n(d.users_kakao)], ['게스트', n(d.users_guest)], ['가족 없음', n(d.users_no_family)], ['알림 받는 사용자', n(d.push_users)]]),
+      kpi('신규 가입 (오늘)', n(d.new_today), [['최근 7일', n(d.new_7d)], ['최근 30일', n(d.new_30d)]]),
+      kpi('활성 사용자 (오늘)', n(d.dau), [['최근 7일', n(d.wau)], ['최근 30일', n(d.mau)]]),
+      kpi('가족', n(d.families), [['2명 이상', n(d.families_2plus)], ['최근 7일 체크한 가족', n(d.families_active_7d)], ['지난주 리포트 받은 가족', n(d.weekly_sent)]]),
+      kpi('체크 (오늘)', n(d.checks_today), [['최근 7일', n(d.checks_7d)], ['사진 (7일)', n(d.photos_7d)], ['고마워요 (7일)', n(d.thanks_7d)]]),
+      kpi('사용 중인 할 일', n(d.tasks), [['담당 지정', n(d.tasks_assigned)], ['반려동물 / 사람', `${n(d.pets)} / ${n(d.people)}`]]),
+      kpi('건강 기록', n(d.health_records), [['쓰는 가족', n(d.health_families)], ['AI 캐릭터', n(d.characters)], ['재고 품목', n(d.supplies)]]),
+      kpi('대기 신고', n(d.reports_open), [['앱 오류 (최근 7일)', n(d.errors_7d)]]),
+    ),
+  );
+  const rows = await rpc('admin_daily', { p_days: 30 });
+  const asc = [...rows].reverse();
+  // 활성 사용자와 체크 수는 크기가 달라 막대 하나에 그리면 작은 쪽이 안 보인다 → 따로, 각자 최대값 기준
+  const chart = (key, label, cls) => {
+    const max = Math.max(1, ...asc.map((r) => r[key]));
+    return h('div', { class: 'card' },
+      h('div', { class: 'label muted' }, `${label} (최대 ${n(max)})`),
+      h('div', { class: 'chart', 'aria-label': `일별 ${label}` }, asc.map((r) =>
+        h('div', { class: 'col', title: `${day(r.day)} ${label} ${n(r[key])}` },
+          h('div', { class: `b ${cls}`, style: `height:${Math.max(2, (r[key] / max) * 120)}px` })))),
+      h('div', { class: 'legend' }, h('span', {}, day(asc[0]?.day)), h('span', { style: 'margin-left:auto' }, day(asc[asc.length - 1]?.day))));
+  };
+  el.append(
+    h('h2', {}, '최근 30일'),
+    h('div', { class: 'grid2' }, chart('dau', '활성 사용자', ''), chart('checks', '체크 수', 'alt')),
+    h('h2', {}, '일별 표'),
+    table(['날짜', ['활성', 1], ['신규', 1], ['활동 가족', 1], ['체크', 1]],
+      rows.map((r) => [day(r.day), [n(r.dau), 1], [n(r.new_users), 1], [n(r.active_families), 1], [n(r.checks), 1]])),
+  );
+}
+
+// head: ['이름', ['숫자열', 1]] / rows: 같은 모양. 숫자열은 오른쪽 정렬
+function table(head, rows, empty = '표시할 내용이 없어요.') {
+  if (!rows.length) return h('div', { class: 'wrap' }, h('div', { class: 'empty' }, empty));
+  const cell = (tag, c) => Array.isArray(c) ? h(tag, { class: c[1] === 1 ? 'num' : c[1] }, c[0]) : h(tag, {}, c);
+  return h('div', { class: 'wrap' }, h('table', {},
+    h('thead', {}, h('tr', {}, head.map((c) => cell('th', c)))),
+    h('tbody', {}, rows.map((r) => h('tr', {}, r.map((c) => cell('td', c)))))));
+}
+
+function listPage(el, fn, cols, toRow, placeholder) {
+  let q = '', offset = 0;
+  const input = h('input', { type: 'search', placeholder });
+  const box = h('div');
+  const load = async () => {
+    box.replaceChildren(h('p', { class: 'muted' }, '불러오는 중…'));
+    try {
+      const rows = await rpc(fn, { p_search: q || null, p_limit: PAGE, p_offset: offset });
+      const total = rows[0]?.total ?? 0;
+      box.replaceChildren(table(cols, rows.map(toRow), q ? '검색 결과가 없어요.' : '아직 없어요.'),
+        h('div', { class: 'pager' }, `${n(total)}개 중 ${total ? offset + 1 : 0}–${Math.min(offset + PAGE, total)}`,
+          h('button', { disabled: offset === 0, onclick: () => { offset -= PAGE; load(); } }, '이전'),
+          h('button', { disabled: offset + PAGE >= total, onclick: () => { offset += PAGE; load(); } }, '다음')));
+    } catch (e) { box.replaceChildren(h('div', { class: 'err' }, errText(e))); }
+  };
+  let t;
+  input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { q = input.value.trim(); offset = 0; load(); }, 300); });
+  el.append(h('div', { class: 'tools' }, input), box);
+  return load();
+}
+
+function users(el) {
+  return listPage(el, 'admin_users',
+    ['호칭', '계정', '이메일', '가입일', '마지막 활동', ['가족', 'wide'], ['체크 30일', 1], ['체크 전체', 1], '알림'],
+    (u) => [u.nickname ?? '-', h('span', { class: `pill ${u.kakao ? 'kakao' : 'guest'}` }, u.kakao ? '카카오' : '게스트'),
+      u.email ?? '-', day(u.created_at), day(u.last_active), [u.families ?? '(가족 없음)', 'wide'],
+      [n(u.checks_30d), 1], [n(u.checks_total), 1], u.push ? '켬' : '-'],
+    '호칭이나 가족 이름으로 찾기');
+}
+
+function families(el) {
+  return listPage(el, 'admin_families',
+    ['가족 이름', '관리자', ['인원', 1], ['반려동물', 1], ['할 일', 1], ['체크 7일', 1], ['체크 전체', 1], '마지막 체크', '만든 날'],
+    (f) => [f.name, f.owner_name ?? '-', [n(f.members), 1], [n(f.pets), 1], [n(f.tasks), 1], [n(f.checks_7d), 1], [n(f.checks_total), 1], day(f.last_check), day(f.created_at)],
+    '가족 이름이나 관리자 호칭으로 찾기');
+}
+
+const REASON = { abuse: '괴롭힘·욕설', inappropriate: '부적절한 사진·글', other: '기타' };
+const STATUS = { open: '대기', reviewed: '확인함', actioned: '조치함' };
+let reportFilter = 'open';
+
+async function reports(el) {
+  const filters = h('div', { class: 'tools' }, [['open', '대기'], ['reviewed', '확인함'], ['actioned', '조치함'], ['all', '전체']].map(([k, label]) =>
+    h('button', { class: reportFilter === k ? 'primary' : '', onclick: () => { reportFilter = k; render(); } }, label)));
+  el.append(filters, h('p', { class: 'muted' }, '이용 규칙상 신고는 3영업일 안에 확인해요. 사진 원본은 작성자가 체크를 취소하거나 가족이 없어지면 사라질 수 있어요.'));
+  const rows = await rpc('admin_reports', { p_status: reportFilter === 'all' ? null : reportFilter, p_limit: 100 });
+  if (!rows.length) return el.append(h('div', { class: 'card empty' }, '해당하는 신고가 없어요.'));
+  for (const r of rows) {
+    const photo = h('div');
+    if (r.photo_path) {
+      photo.append(h('button', { onclick: async (ev) => {
+        ev.target.disabled = true;
+        if (DEMO) return photo.replaceChildren(h('p', { class: 'muted' }, '(예시 화면에서는 사진을 불러오지 않아요)'));
+        if (!PHOTO_RE.test(r.photo_path)) return photo.replaceChildren(h('p', { class: 'muted' }, '사진 경로 모양이 달라 열지 않았어요.'));
+        // 경로를 주소가 아니라 본문으로 보내는 여러 개 방식을 쓴다 (앱의 signedUrls 와 같음)
+        const { data, error } = await sb.storage.from('pet-photos').createSignedUrls([r.photo_path], 300);
+        const url = data?.[0]?.signedUrl;
+        photo.replaceChildren(error || !url ? h('p', { class: 'muted' }, '사진을 불러오지 못했어요. 원본이 지워졌을 수 있어요.')
+          : h('img', { src: url, alt: '신고된 사진' }));
+      } }, '신고된 사진 보기'));
+    }
+    const act = (status, label, cls) => h('button', { class: cls, disabled: r.status === status, onclick: async () => {
+      try { await rpc('admin_set_report_status', { p_id: r.id, p_status: status }); dash = await rpc('admin_dashboard'); render(); }
+      catch (e) { alert(errText(e)); }
+    } }, label);
+    el.append(h('div', { class: 'card report' },
+      h('div', {}, h('span', { class: `pill ${r.status === 'open' ? 'open' : 'done'}` }, STATUS[r.status] ?? r.status), ' ',
+        h('b', {}, REASON[r.reason] ?? r.reason), ' · ', r.target_type === 'member' ? '구성원 신고' : '기록(메모·사진) 신고'),
+      h('div', { class: 'meta' }, `${kst(r.created_at)} · 가족 ${r.family_name ?? '(삭제된 가족)'} · 신고한 사람 ${r.reporter_name ?? '-'} · 대상 ${r.target_name ?? '-'} (지금까지 신고 ${n(r.target_reports)}번)`,
+        r.handled_at ? ` · 처리 ${kst(r.handled_at)}` : ''),
+      r.content_note ? h('blockquote', {}, r.content_note) : null,
+      r.note ? h('div', { class: 'meta' }, '신고 메모: ', r.note) : null,
+      photo,
+      h('div', { class: 'actions' }, act('reviewed', '확인함 (문제 없음)'), act('actioned', '조치함', 'primary'), r.status !== 'open' ? act('open', '다시 대기로', 'danger') : null),
+    ));
+  }
+}
+
+async function errors(el) {
+  const rows = await rpc('admin_errors', { p_days: 7 });
+  el.append(h('p', { class: 'muted' }, '최근 7일 앱 오류 (같은 메시지끼리 묶음, 많은 순)'),
+    table([['메시지', 'wide'], ['횟수', 1], ['사용자', 1], '마지막', '버전', '화면'],
+      rows.map((e) => [[e.message, 'wide'], [n(e.count), 1], [n(e.users), 1], kst(e.last_seen), e.versions ?? '-', e.screens ?? '-']),
+      '최근 7일 동안 오류가 없어요.'));
+}
+
+// ── 예시 데이터 (#demo): 화면 확인용, 실제 사용자 정보 아님 ──
+function demo(name, args) {
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const back = (i) => new Date(Date.parse(today) - i * 864e5).toISOString().slice(0, 10);
+  if (name === 'admin_dashboard') return { users: 1284, users_kakao: 512, users_guest: 772, users_no_family: 41, new_today: 23, new_7d: 168, new_30d: 611,
+    dau: 402, wau: 803, mau: 1104, families: 655, families_2plus: 288, families_active_7d: 431, checks_today: 2310, checks_7d: 15880,
+    pets: 790, people: 37, tasks: 3920, tasks_assigned: 611, health_records: 344, health_families: 120, characters: 96, photos_7d: 512, thanks_7d: 1203,
+    supplies: 210, push_users: 1010, weekly_sent: 498, reports_open: 2, errors_7d: 5 };
+  if (name === 'admin_daily') return Array.from({ length: args.p_days ?? 30 }, (_, i) => ({ day: back(i), dau: 300 + Math.round(100 * Math.sin(i / 3)) + 3 * (30 - i), new_users: 15 + (i % 9), active_families: 200 + (i % 40), checks: 1800 + Math.round(400 * Math.cos(i / 4)) }));
+  if (name === 'admin_users') {
+    const all = Array.from({ length: 73 }, (_, i) => ({ user_id: String(i), nickname: ['엄마', '아빠', '언니', '할머니', '첫째'][i % 5], kakao: i % 3 !== 0,
+      email: i % 3 !== 0 ? `us***@example.com` : null, created_at: back(i % 40), last_active: back(i % 6), families: i % 11 === 0 ? null : `예시${i % 20}네 집`,
+      family_count: i % 11 === 0 ? 0 : 1, checks_total: 300 - i * 3, checks_30d: 90 - i, push: i % 4 !== 0 }));
+    const f = args.p_search ? all.filter((u) => (u.nickname + (u.families ?? '')).includes(args.p_search)) : all;
+    return f.slice(args.p_offset, args.p_offset + args.p_limit).map((u) => ({ ...u, total: f.length }));
+  }
+  if (name === 'admin_families') {
+    const all = Array.from({ length: 12 }, (_, i) => ({ family_id: String(i), name: `예시${i}네 집`, owner_name: ['엄마', '아빠'][i % 2], members: 1 + (i % 4), pets: 1 + (i % 2),
+      tasks: 4 + i, checks_7d: 40 - i * 2, checks_total: 600 - i * 30, last_check: back(i % 3), created_at: back(10 + i) }));
+    return all.slice(args.p_offset, args.p_offset + args.p_limit).map((x) => ({ ...x, total: all.length }));
+  }
+  if (name === 'admin_reports') return [
+    { id: 'a', created_at: new Date().toISOString(), status: 'open', reason: 'abuse', target_type: 'log', family_name: '예시네 집', reporter_name: '언니', target_name: '첫째', target_reports: 2, content_note: '(예시) 신고된 메모 내용', photo_path: 'x/logs/y.jpg', note: null, handled_at: null },
+    { id: 'b', created_at: new Date(Date.now() - 864e5).toISOString(), status: 'open', reason: 'inappropriate', target_type: 'member', family_name: null, reporter_name: '엄마', target_name: '아빠', target_reports: 1, content_note: null, photo_path: null, note: null, handled_at: null },
+  ].filter((r) => !args.p_status || r.status === args.p_status);
+  if (name === 'admin_errors') return [{ message: '(예시) Network request failed', count: 4, users: 3, last_seen: new Date().toISOString(), versions: '0.1.0', screens: '/subject' }];
+  if (name === 'admin_set_report_status') return null;
+  return null;
+}
+
+// 다른 사이트가 이 페이지를 틀(iframe) 안에 넣어 버튼을 누르게 속이는 것(클릭재킹)을 막는다
+if (window.top !== window.self) app.replaceChildren(h('p', { class: 'err' }, '이 페이지는 직접 열어야 해요.'));
+else start();
+</script>
+</body>
+</html>
