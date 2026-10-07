@@ -211,15 +211,17 @@ async function summary(el) {
     ),
   );
   // 저장소·DB 사용량 (무료 요금제 한도 대비)과 지금 걸린 제한값
-  const u = await rpc('admin_usage');
-  const L = u.limits ?? {};
+  let u = null;
+  try { u = await rpc('admin_usage'); } catch { /* 024 전이거나 실패: 저장소 칸만 빼고 계속 */ }
+  const L = u?.limits ?? {};
   const mb = (b) => (Number(b) / 1048576).toFixed(1);
   const pct = (b, limMb) => (limMb ? `${Math.round((Number(b) / 1048576 / limMb) * 100)}%` : '-');
-  el.append(h('h2', {}, '저장소·제한'), h('div', { class: 'grid' },
+  if (u) el.append(h('h2', {}, '저장소·제한'), h('div', { class: 'grid' },
     kpi('사진 저장소', `${mb(u.photo_bytes)} MB`, [['무료 한도 대비', `${pct(u.photo_bytes, L.free_storage_mb)} (${n(L.free_storage_mb)} MB)`],
-      ['사진 수', `${n(u.photos)}장`], ['업로드를 막는 선', `${n(L.photo_total_mb)} MB`], ['정리 대기(고아)', `${n(u.orphans)}장`]]),
+      ['사진 수', `${n(u.photos)}장`], ['업로드를 막는 선', `${n(L.photo_total_mb)} MB`], ['정리 대기(고아)', `${n(u.orphans)}장`],
+      ['이름이 이상한 파일', `${n(u.odd_names ?? 0)}장`]]),
     kpi('DB 크기', `${mb(u.db_bytes)} MB`, [['무료 한도 대비', `${pct(u.db_bytes, L.free_db_mb)} (${n(L.free_db_mb)} MB)`]]),
-    kpi('사진 올리기 제한', `${n(L.photo_per_user_day)}장/일`, [['사람당 하루', `${n(L.photo_per_user_day)}장`], ['가족당', `${n(L.photo_per_family)}장`], ['파일 하나', '1 MB']]),
+    kpi('오늘 올린 사진', `${n(u.uploads_today ?? 0)}장`, [['사람당 하루', `${n(L.photo_per_user_day)}장`], ['가족당', `${n(L.photo_per_family)}장 (+반려동물 사진 5)`], ['파일 하나', '2 MB']]),
   ));
   const rows = await rpc('admin_daily', { p_days: 30 });
   const asc = [...rows].reverse();
@@ -365,6 +367,7 @@ function demo(name, args) {
   if (name === 'admin_errors') return [{ message: '(예시) Network request failed', count: 4, users: 3, last_seen: new Date().toISOString(), versions: '0.1.0', screens: '/subject' }];
   if (name === 'admin_set_report_status') return null;
   if (name === 'admin_usage') return { photos: 1830, photo_bytes: 412 * 1048576, db_bytes: 38 * 1048576, orphans: 4,
+    odd_names: 0, uploads_today: 57,
     limits: { photo_per_user_day: 20, photo_per_family: 300, photo_total_mb: 800, free_storage_mb: 1024, free_db_mb: 500 } };
   return null;
 }
