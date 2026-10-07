@@ -29,6 +29,7 @@
   button.danger { color: var(--late); border-color: var(--late); }
   button.kakao { background: var(--kakao); border-color: var(--kakao); color: #191919; font-weight: 700; padding: 12px 24px; }
   button:disabled { opacity: .45; cursor: default; }
+  button.mini { min-height: 30px; padding: 3px 10px; font-size: 12px; border-radius: 10px; margin-left: 6px; }
   .card { background: var(--white); border-radius: 18px; box-shadow: var(--shadow); padding: 16px; }
   .center { max-width: 420px; margin: 60px auto; text-align: center; display: grid; gap: 14px; }
   .muted { color: var(--sub); font-size: 13px; }
@@ -126,8 +127,22 @@ function h(tag, props = {}, ...kids) {
 const n = (v) => (v == null ? '-' : Number(v).toLocaleString('ko-KR'));
 const day = (v) => (v ? String(v).slice(0, 10) : '-');
 const kst = (v) => v ? new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
-const ERR = { forbidden: '관리자 계정이 아니에요.', not_found: '이미 없어진 신고예요.', already_open: '같은 사람이 같은 대상을 다시 신고해 열린 신고가 이미 있어요.' };
+const ERR = { forbidden: '관리자 계정이 아니에요.', not_found: '이미 없어진 대상이에요.', bad_limit: '값이 허용 범위를 벗어났어요.', already_open: '같은 사람이 같은 대상을 다시 신고해 열린 신고가 이미 있어요.' };
 const errText = (e) => Object.entries(ERR).find(([k]) => String(e?.message ?? e).includes(k))?.[1] ?? `문제가 생겼어요: ${e?.message ?? e}`;
+
+// 한도 숫자 묻기: 취소 → undefined, 빈칸(개별 값 지우기 허용 시) → null, 숫자 → 정수
+function askNumber(title, current, allowReset) {
+  const hint = allowReset ? '\n(빈칸으로 두면 기본값으로 돌아가요)' : '';
+  const v = prompt(`${title}${hint}`, current == null ? '' : String(current));
+  if (v === null) return undefined;
+  if (v.trim() === '') return allowReset ? null : undefined;
+  const num = Number(v.trim());
+  if (!Number.isInteger(num) || num < 0) { alert('0 이상의 정수로 적어주세요.'); return undefined; }
+  return num;
+}
+async function setLimit(fn, args, done) {
+  try { await rpc(fn, args); done(); } catch (e) { alert(errText(e)); }
+}
 
 async function rpc(name, args = {}) {
   if (DEMO) return demo(name, args);
@@ -221,7 +236,17 @@ async function summary(el) {
       ['사진 수', `${n(u.photos)}장`], ['업로드를 막는 선', `${n(L.photo_total_mb)} MB`], ['정리 대기(고아)', `${n(u.orphans)}장`],
       ['이름이 이상한 파일', `${n(u.odd_names ?? 0)}장`]]),
     kpi('DB 크기', `${mb(u.db_bytes)} MB`, [['무료 한도 대비', `${pct(u.db_bytes, L.free_db_mb)} (${n(L.free_db_mb)} MB)`]]),
-    kpi('오늘 올린 사진', `${n(u.uploads_today ?? 0)}장`, [['사람당 하루', `${n(L.photo_per_user_day)}장`], ['가족당', `${n(L.photo_per_family)}장 (+반려동물 사진 5)`], ['파일 하나', '2 MB']]),
+    (() => {
+      const card = kpi('오늘 올린 사진', `${n(u.uploads_today ?? 0)}장`, [['사람당 하루(기본)', `${n(L.photo_per_user_day)}장`],
+        ['가족당(기본)', `${n(L.photo_per_family)}장 (+반려동물 사진 5)`], ['전체 상한', `${n(L.photo_total_mb)} MB`], ['파일 하나', '2 MB']]);
+      const change = (key, label) => h('button', { class: 'mini', onclick: () => {
+        const v = askNumber(`${label} 기본값`, L[key], false);
+        if (v !== undefined) setLimit('admin_set_limit', { p_key: key, p_value: v }, render);
+      } }, label);
+      card.append(h('div', { class: 'actions', style: 'margin-top:8px' }, '기본값 바꾸기',
+        change('photo_per_user_day', '사람당 하루'), change('photo_per_family', '가족당'), change('photo_total_mb', '전체 MB')));
+      return card;
+    })(),
   ));
   const rows = await rpc('admin_daily', { p_days: 30 });
   const asc = [...rows].reverse();
@@ -262,7 +287,7 @@ function listPage(el, fn, cols, toRow, placeholder) {
     try {
       const rows = await rpc(fn, { p_search: q || null, p_limit: PAGE, p_offset: offset });
       const total = rows[0]?.total ?? 0;
-      box.replaceChildren(table(cols, rows.map(toRow), q ? '검색 결과가 없어요.' : '아직 없어요.'),
+      box.replaceChildren(table(cols, rows.map((r) => toRow(r, load)), q ? '검색 결과가 없어요.' : '아직 없어요.'),
         h('div', { class: 'pager' }, `${n(total)}개 중 ${total ? offset + 1 : 0}–${Math.min(offset + PAGE, total)}`,
           h('button', { disabled: offset === 0, onclick: () => { offset -= PAGE; load(); } }, '이전'),
           h('button', { disabled: offset + PAGE >= total, onclick: () => { offset += PAGE; load(); } }, '다음')));
@@ -276,17 +301,29 @@ function listPage(el, fn, cols, toRow, placeholder) {
 
 function users(el) {
   return listPage(el, 'admin_users',
-    ['호칭', '계정', '이메일', '가입일', '마지막 활동', ['가족', 'wide'], ['체크 30일', 1], ['체크 전체', 1], '알림'],
-    (u) => [u.nickname ?? '-', h('span', { class: `pill ${u.kakao ? 'kakao' : 'guest'}` }, u.kakao ? '카카오' : '게스트'),
+    ['호칭', '계정', '이메일', '가입일', '마지막 활동', ['가족', 'wide'], ['체크 30일', 1], ['체크 전체', 1], '알림', '사진 오늘/하루 한도'],
+    (u, reload) => [u.nickname ?? '-', h('span', { class: `pill ${u.kakao ? 'kakao' : 'guest'}` }, u.kakao ? '카카오' : '게스트'),
       u.email ?? '-', day(u.created_at), day(u.last_active), [u.families ?? '(가족 없음)', 'wide'],
-      [n(u.checks_30d), 1], [n(u.checks_total), 1], u.push ? '켬' : '-'],
+      [n(u.checks_30d), 1], [n(u.checks_total), 1], u.push ? '켬' : '-',
+      h('span', {}, `${n(u.photos_today ?? 0)} / ${n(u.photo_day_limit)}장 `,
+        u.photo_day_custom ? h('span', { class: 'pill kakao' }, '개별') : h('span', { class: 'pill guest' }, '기본'),
+        h('button', { class: 'mini', onclick: () => {
+          const v = askNumber(`${u.nickname ?? '이 사용자'}의 하루 사진 수`, u.photo_day_custom ? u.photo_day_limit : null, true);
+          if (v !== undefined) setLimit('admin_set_user_photo_limit', { p_user: u.user_id, p_value: v }, reload);
+        } }, '바꾸기'))],
     '호칭이나 가족 이름으로 찾기');
 }
 
 function families(el) {
   return listPage(el, 'admin_families',
-    ['가족 이름', '관리자', ['인원', 1], ['반려동물', 1], ['할 일', 1], ['체크 7일', 1], ['체크 전체', 1], '마지막 체크', '만든 날'],
-    (f) => [f.name, f.owner_name ?? '-', [n(f.members), 1], [n(f.pets), 1], [n(f.tasks), 1], [n(f.checks_7d), 1], [n(f.checks_total), 1], day(f.last_check), day(f.created_at)],
+    ['가족 이름', '관리자', ['인원', 1], ['반려동물', 1], ['할 일', 1], ['체크 7일', 1], ['체크 전체', 1], '마지막 체크', '만든 날', '사진 / 한도'],
+    (f, reload) => [f.name, f.owner_name ?? '-', [n(f.members), 1], [n(f.pets), 1], [n(f.tasks), 1], [n(f.checks_7d), 1], [n(f.checks_total), 1], day(f.last_check), day(f.created_at),
+      h('span', {}, `${n(f.photos ?? 0)} / ${n(f.photo_limit)}장 `,
+        f.photo_custom ? h('span', { class: 'pill kakao' }, '개별') : h('span', { class: 'pill guest' }, '기본'),
+        h('button', { class: 'mini', onclick: () => {
+          const v = askNumber(`${f.name}의 사진 한도(기록 사진 수)`, f.photo_custom ? f.photo_limit : null, true);
+          if (v !== undefined) setLimit('admin_set_family_photo_limit', { p_family: f.family_id, p_value: v }, reload);
+        } }, '바꾸기'))],
     '가족 이름이나 관리자 호칭으로 찾기');
 }
 
@@ -351,13 +388,15 @@ function demo(name, args) {
   if (name === 'admin_users') {
     const all = Array.from({ length: 73 }, (_, i) => ({ user_id: String(i), nickname: ['엄마', '아빠', '언니', '할머니', '첫째'][i % 5], kakao: i % 3 !== 0,
       email: i % 3 !== 0 ? `us***@example.com` : null, created_at: back(i % 40), last_active: back(i % 6), families: i % 11 === 0 ? null : `예시${i % 20}네 집`,
-      family_count: i % 11 === 0 ? 0 : 1, checks_total: 300 - i * 3, checks_30d: 90 - i, push: i % 4 !== 0 }));
+      family_count: i % 11 === 0 ? 0 : 1, checks_total: 300 - i * 3, checks_30d: 90 - i, push: i % 4 !== 0,
+      photo_day_limit: i % 7 === 0 ? 10 : 3, photo_day_custom: i % 7 === 0, photos_today: i % 4 }));
     const f = args.p_search ? all.filter((u) => (u.nickname + (u.families ?? '')).includes(args.p_search)) : all;
     return f.slice(args.p_offset, args.p_offset + args.p_limit).map((u) => ({ ...u, total: f.length }));
   }
   if (name === 'admin_families') {
     const all = Array.from({ length: 12 }, (_, i) => ({ family_id: String(i), name: `예시${i}네 집`, owner_name: ['엄마', '아빠'][i % 2], members: 1 + (i % 4), pets: 1 + (i % 2),
-      tasks: 4 + i, checks_7d: 40 - i * 2, checks_total: 600 - i * 30, last_check: back(i % 3), created_at: back(10 + i) }));
+      tasks: 4 + i, checks_7d: 40 - i * 2, checks_total: 600 - i * 30, last_check: back(i % 3), created_at: back(10 + i),
+      photos: 3 * i, photo_limit: i === 2 ? 100 : 30, photo_custom: i === 2 }));
     return all.slice(args.p_offset, args.p_offset + args.p_limit).map((x) => ({ ...x, total: all.length }));
   }
   if (name === 'admin_reports') return [
@@ -365,7 +404,7 @@ function demo(name, args) {
     { id: 'b', created_at: new Date(Date.now() - 864e5).toISOString(), status: 'open', reason: 'inappropriate', target_type: 'member', family_name: null, reporter_name: '엄마', target_name: '아빠', target_reports: 1, content_note: null, photo_path: null, note: null, handled_at: null },
   ].filter((r) => !args.p_status || r.status === args.p_status);
   if (name === 'admin_errors') return [{ message: '(예시) Network request failed', count: 4, users: 3, last_seen: new Date().toISOString(), versions: '0.1.0', screens: '/subject' }];
-  if (name === 'admin_set_report_status') return null;
+  if (name === 'admin_set_report_status' || name.startsWith('admin_set_')) return null;
   if (name === 'admin_usage') return { photos: 1830, photo_bytes: 412 * 1048576, db_bytes: 38 * 1048576, orphans: 4,
     odd_names: 0, uploads_today: 57,
     limits: { photo_per_user_day: 20, photo_per_family: 300, photo_total_mb: 800, free_storage_mb: 1024, free_db_mb: 500 } };
